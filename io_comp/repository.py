@@ -1,13 +1,18 @@
 import csv
-from typing import List
+import logging
+from typing import List, Protocol
 from datetime import datetime
-from .models import Event
+from .models import Event, DataFileError
 
-class CalendarRepository:
-    """Handles advanced CSV parsing for multi-day calendars."""
-    
+# Define the Interface (Teacher's requirement)
+class ICalendarRepository(Protocol):
+    def get_all_events(self) -> List[Event]:
+        ...
+
+class CalendarRepository: # Implements ICalendarRepository
     def __init__(self, file_path: str):
         self.file_path = file_path
+        self.logger = logging.getLogger(__name__)
 
     def get_all_events(self) -> List[Event]:
         events = []
@@ -16,7 +21,6 @@ class CalendarRepository:
                 reader = csv.DictReader(file)
                 for row in reader:
                     try:
-                        # Parsing with additional fields: date and priority
                         start_t = datetime.strptime(row['start_time'].strip(), "%H:%M").time()
                         end_t = datetime.strptime(row['end_time'].strip(), "%H:%M").time()
                         
@@ -27,8 +31,10 @@ class CalendarRepository:
                             end_time=end_t,
                             priority=row.get('priority', 'High').strip()
                         ))
-                    except (ValueError, KeyError):
+                    except (ValueError, KeyError) as e:
+                        self.logger.warning(f"Skipping malformed row: {row} - Error: {e}")
                         continue
         except FileNotFoundError:
-            print(f"Error: File {self.file_path} not found.")
+            self.logger.error(f"File not found: {self.file_path}")
+            raise DataFileError(f"Could not find calendar file at {self.file_path}")
         return events

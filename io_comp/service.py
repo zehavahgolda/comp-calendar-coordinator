@@ -1,35 +1,39 @@
+import logging
 from datetime import time, timedelta, datetime
-from typing import List, Dict
+from typing import List
 from .models import Event
-from .repository import CalendarRepository
+from .repository import ICalendarRepository 
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
 class CalendarService:
-    """
-    Advanced Service Layer.
-    Supports multi-day filtering and professional scheduling constraints.
-    """
-
-    def __init__(self, repository: CalendarRepository):
+    def __init__(self, repository: ICalendarRepository): 
         self.repository = repository
+        self.logger = logging.getLogger(__name__)
+        
         self.work_start = time(8, 0)
         self.work_end = time(18, 0)
         self.buffer = timedelta(minutes=10)
 
     def find_slots_by_date(self, participants: List[str], target_date: str, duration: timedelta) -> List[time]:
-        """Finds available slots for a specific date among chosen participants."""
-        all_events = self.repository.get_all_events()
+        self.logger.info(f"Searching slots for {participants} on {target_date}")
         
-        # Filter: Only events for these people on this specific date
+        all_events = self.repository.get_all_events()
         relevant = [e for e in all_events if e.person_name in participants and e.event_date == target_date]
         
         available = []
         current = self.work_start
         
-        while self._add_minutes(current, duration + self.buffer) <= self.work_end:
+        while self._add_minutes(current, duration) <= self.work_end:
             potential_end = self._add_minutes(current, duration)
             
-            # Smart Check: Is anyone busy?
-            is_busy = any(event.overlaps_with(current, potential_end) for event in relevant)
+            is_busy = False
+            for event in relevant:
+                event_end_with_buffer = self._add_minutes(event.end_time, self.buffer)
+                if not (current >= event_end_with_buffer or potential_end <= event.start_time):
+                    is_busy = True
+                    break
             
             if not is_busy:
                 available.append(current)
